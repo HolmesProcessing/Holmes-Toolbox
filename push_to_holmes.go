@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"crypto/tls"
+//	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"gopkg.in/mgo.v2/bson"
+	"sync"
 )
 
 type critsSample struct {
@@ -27,6 +28,7 @@ var (
 	client          *http.Client
 	critsFileServer string
 	holmesStorage   string
+	wg              sync.WaitGroup
 )
 
 func init() {
@@ -66,11 +68,14 @@ func main() {
 
 	// line by line
 	for scanner.Scan() {
-		copySample(scanner.Text())
+		wg.Add(1)
+		go copySample(scanner.Text())
 	}
+	wg.Wait()
 }
 
 func copySample(hash string) {
+	defer wg.Done()
 	// set all necessary parameters
 	parameters := map[string]string{
 		"user_id": "1",
