@@ -28,7 +28,9 @@ var (
 	client          *http.Client
 	critsFileServer string
 	holmesStorage   string
+	numWorkers      int
 	wg              sync.WaitGroup
+	c               chan string
 )
 
 func init() {
@@ -44,6 +46,14 @@ func init() {
 	client = &http.Client{Transport: tr}
 }
 
+func worker() {
+	for true{
+		sample :=<- c
+		copySample(sample)
+		defer wg.Done()
+	}
+}
+
 func main() {
 	fmt.Println("Running...")
 
@@ -52,6 +62,7 @@ func main() {
 	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to copy from CRITs to Totem")
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server")
 	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server")
+	flag.IntVar(&numWorkers, "workers", 0, "Number of parallel workers")
 	flag.Parse()
 
 	fmt.Sprintf("Copying samples from %s", fPath)
@@ -65,17 +76,20 @@ func main() {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-
+	c = make(chan string)
+	for i := 0; i < 10; i++ {
+		go worker()
+	}
 	// line by line
 	for scanner.Scan() {
 		wg.Add(1)
-		go copySample(scanner.Text())
+		c <- scanner.Text()
+		//go copySample(scanner.Text())
 	}
 	wg.Wait()
 }
 
 func copySample(hash string) {
-	defer wg.Done()
 	// set all necessary parameters
 	parameters := map[string]string{
 		"user_id": "1",
