@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"path/filepath"
 
 	"gopkg.in/mgo.v2/bson"
 	"sync"
@@ -28,6 +29,11 @@ var (
 	client          *http.Client
 	critsFileServer string
 	holmesStorage   string
+	directory       string
+	comment         string
+	userid          string
+	source          string
+	topLevel        bool
 	numWorkers      int
 	wg              sync.WaitGroup
 	c               chan string
@@ -49,8 +55,9 @@ func init() {
 func worker() {
 	for true{
 		sample :=<- c
+		//fmt.Printf("Working on %s\n", sample)
 		copySample(sample)
-		defer wg.Done()
+		wg.Done()
 	}
 }
 
@@ -62,43 +69,82 @@ func main() {
 	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to copy from CRITs to Totem")
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server")
 	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server")
-	flag.IntVar(&numWorkers, "workers", 0, "Number of parallel workers")
+	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
+	flag.StringVar(&comment, "comment", "", "Comment of submitter")
+	flag.StringVar(&source, "src", "", "Source of the files")
+	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
+	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
 	flag.Parse()
 
-	fmt.Sprintf("Copying samples from %s", fPath)
+	//fmt.Sprintf("Copying samples from %s", fPath)
 
-	file, err := os.Open(fPath)
-	if err != nil {
-		fmt.Println("Couln't open file containing sample list!", err.Error())
-		return
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
 	c = make(chan string)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < numWorkers; i++ {
 		go worker()
 	}
-	// line by line
-	for scanner.Scan() {
-		wg.Add(1)
-		c <- scanner.Text()
-		//go copySample(scanner.Text())
+
+	if fPath != ""	{
+		file, err := os.Open(fPath)
+		if err != nil {
+			fmt.Println("Couln't open file containing sample list!", err.Error())
+			return
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		scanner.Split(bufio.ScanLines)
+		// line by line
+		for scanner.Scan() {
+			wg.Add(1)
+			c <- scanner.Text()
+			//go copySample(scanner.Text())
+		}
 	}
+	fullPath, err := filepath.Abs(directory)
+
+    if err != nil {
+        log.Println("path error:", err)
+        return
+    }
+    topLevel = true
+    err = filepath.Walk(fullPath, walkFn)
+    if err != nil {
+        log.Println("walk error:", err)
+        return
+    }
+
 	wg.Wait()
 }
 
-func copySample(hash string) {
+func walkFn(path string, fi os.FileInfo, err error) (e error) {
+	if fi.IsDir(){
+		if topLevel {
+			topLevel = false
+			return nil
+		} else {
+			return filepath.SkipDir
+		}
+	}
+	//print("Adding " + path + "\n")
+	wg.Add(1)
+	c <- path
+	return nil
+}
+
+func copySample(name string) {
 	// set all necessary parameters
 	parameters := map[string]string{
-		"user_id": "1",
-		"source":  "CRITs",
-		"name":    hash,
+		"user_id": userid, // user id of uploader (command line argument)
+		"source":  source, // (TODO) Gateway should match existing sources (command line argument)
+		"name":    name, // filename
 		"date":    time.Now().Format(time.RFC3339),
+		"comment": comment, // comment from submitter (command line argument)
+		//"tags"
 	}
 
-	request, err := buildRequest(holmesStorage+"/samples/", parameters, hash)
+	request, err := buildRequest(holmesStorage+"/samples/", parameters, name)
+	//request, err := buildRequest(holmesStorage, parameters, name)
+	
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
 	}
@@ -116,7 +162,7 @@ func copySample(hash string) {
 	}
 	resp.Body.Close()
 
-	fmt.Println("Uploaded", hash)
+	fmt.Println("Uploaded", name)
 	fmt.Println(resp.StatusCode)
 	fmt.Println(body)
 	fmt.Println("-------------------------------------------")
@@ -178,6 +224,7 @@ func buildRequest(uri string, params map[string]string, hash string) (*http.Requ
 	}
 
 	request, err := http.NewRequest("PUT", uri, body)
+	//request, err := http.NewRequest("POST", uri, body)
 	if err != nil {
 		return nil, err
 	}
