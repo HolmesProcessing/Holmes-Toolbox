@@ -18,6 +18,9 @@ import (
 
 	"gopkg.in/mgo.v2/bson"
 	"sync"
+
+	"github.com/rakyll/magicmime"
+	"strings"
 )
 
 type critsSample struct {
@@ -34,6 +37,7 @@ var (
 	userid          string
 	source          string
 	topLevel        bool
+	recursive       bool
 	numWorkers      int
 	wg              sync.WaitGroup
 	c               chan string
@@ -74,6 +78,7 @@ func main() {
 	flag.StringVar(&source, "src", "", "Source of the files")
 	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
+	flag.BoolVar(&recursive, "rec", false, "If set, the directory will be iterated recursively")
 	flag.Parse()
 
 	//fmt.Sprintf("Copying samples from %s", fPath)
@@ -100,6 +105,10 @@ func main() {
 			//go copySample(scanner.Text())
 		}
 	}
+
+	magicmime.Open(magicmime.MAGIC_MIME_TYPE | magicmime.MAGIC_SYMLINK | magicmime.MAGIC_ERROR)
+	defer magicmime.Close()
+
 	fullPath, err := filepath.Abs(directory)
 
     if err != nil {
@@ -118,17 +127,31 @@ func main() {
 
 func walkFn(path string, fi os.FileInfo, err error) (e error) {
 	if fi.IsDir(){
-		if topLevel {
-			topLevel = false
+		if recursive {
 			return nil
 		} else {
-			return filepath.SkipDir
+			if topLevel {
+				topLevel = false
+				return nil
+			} else {
+				return filepath.SkipDir
+			}
 		}
 	}
-	//print("Adding " + path + "\n")
-	wg.Add(1)
-	c <- path
-	return nil
+	mimetype, err := magicmime.TypeByFile(path)
+	if err != nil {
+		log.Println("mimetype error (skipping " + path + "):", err)
+		return nil
+	}
+	if strings.Contains(mimetype, "exec") {
+		print("Adding " + path + " (" + mimetype + ")\n")
+		wg.Add(1)
+		c <- path
+		return nil
+	} else {
+		print("Skipping " + path + " (" + mimetype + ")\n")
+		return nil
+	}
 }
 
 func copySample(name string) {
@@ -136,14 +159,13 @@ func copySample(name string) {
 	parameters := map[string]string{
 		"user_id": userid, // user id of uploader (command line argument)
 		"source":  source, // (TODO) Gateway should match existing sources (command line argument)
-		"name":    name, // filename
+		"name":    filepath.Base(name), // filename
 		"date":    time.Now().Format(time.RFC3339),
 		"comment": comment, // comment from submitter (command line argument)
 		//"tags"
 	}
 
 	request, err := buildRequest(holmesStorage+"/samples/", parameters, name)
-	//request, err := buildRequest(holmesStorage, parameters, name)
 	
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
