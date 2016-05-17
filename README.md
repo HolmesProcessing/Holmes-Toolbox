@@ -15,6 +15,11 @@ Helper scripts for managing Holmes
 
 ### How to easily move files from a local folder to Holmes-Storage
 
+1. Make sure your Holmes-Storage is running
+2. `go run push_to_holmes.go --dir=$Folder --storage=$HolmesURL`
+
+Alternative way:
+
 1. Move all you samples to one folder
 2. `cd` into folder
 3. `find `pwd` -type f > out.txt`
