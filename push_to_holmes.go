@@ -6,7 +6,6 @@ import (
 //	"crypto/tls"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -36,6 +35,7 @@ var (
 	comment         string
 	userid          string
 	source          string
+	mimetypePattern string
 	topLevel        bool
 	recursive       bool
 	numWorkers      int
@@ -59,39 +59,40 @@ func init() {
 func worker() {
 	for true{
 		sample :=<- c
-		//fmt.Printf("Working on %s\n", sample)
+		//log.Printf("Working on %s\n", sample)
 		copySample(sample)
 		wg.Done()
 	}
 }
 
 func main() {
-	fmt.Println("Running...")
+	log.Println("Running...")
 
 	// cmd line flags
 	var fPath string
-	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to copy from CRITs to Totem")
-	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server")
+	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
+	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
 	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server")
+	flag.StringVar(&mimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
 	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
 	flag.StringVar(&comment, "comment", "", "Comment of submitter")
 	flag.StringVar(&source, "src", "", "Source of the files")
 	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
-	flag.BoolVar(&recursive, "rec", false, "If set, the directory will be iterated recursively")
+	flag.BoolVar(&recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
 	flag.Parse()
 
-	//fmt.Sprintf("Copying samples from %s", fPath)
+	//log.Sprintf("Copying samples from %s", fPath)
 
 	c = make(chan string)
 	for i := 0; i < numWorkers; i++ {
 		go worker()
 	}
 
-	if fPath != ""	{
+	if fPath != "" {
 		file, err := os.Open(fPath)
 		if err != nil {
-			fmt.Println("Couln't open file containing sample list!", err.Error())
+			log.Println("Couln't open file containing sample list!", err.Error())
 			return
 		}
 		defer file.Close()
@@ -105,27 +106,27 @@ func main() {
 			//go copySample(scanner.Text())
 		}
 	}
+	if directory != "" {
+		magicmime.Open(magicmime.MAGIC_MIME_TYPE | magicmime.MAGIC_SYMLINK | magicmime.MAGIC_ERROR)
+		defer magicmime.Close()
 
-	magicmime.Open(magicmime.MAGIC_MIME_TYPE | magicmime.MAGIC_SYMLINK | magicmime.MAGIC_ERROR)
-	defer magicmime.Close()
+		fullPath, err := filepath.Abs(directory)
 
-	fullPath, err := filepath.Abs(directory)
-
-    if err != nil {
-        log.Println("path error:", err)
-        return
-    }
-    topLevel = true
-    err = filepath.Walk(fullPath, walkFn)
-    if err != nil {
-        log.Println("walk error:", err)
-        return
-    }
-
+		if err != nil {
+			log.Println("path error:", err)
+			return
+		}
+		topLevel = true
+		err = filepath.Walk(fullPath, walkFn)
+		if err != nil {
+			log.Println("walk error:", err)
+			return
+		}
+	}
 	wg.Wait()
 }
 
-func walkFn(path string, fi os.FileInfo, err error) (e error) {
+func walkFn(path string, fi os.FileInfo, err error) (error) {
 	if fi.IsDir(){
 		if recursive {
 			return nil
@@ -143,13 +144,13 @@ func walkFn(path string, fi os.FileInfo, err error) (e error) {
 		log.Println("mimetype error (skipping " + path + "):", err)
 		return nil
 	}
-	if strings.Contains(mimetype, "exec") {
-		print("Adding " + path + " (" + mimetype + ")\n")
+	if strings.Contains(mimetype, mimetypePattern) {
+		log.Println("Adding " + path + " (" + mimetype + ")")
 		wg.Add(1)
 		c <- path
 		return nil
 	} else {
-		print("Skipping " + path + " (" + mimetype + ")\n")
+		log.Println("Skipping " + path + " (" + mimetype + ")")
 		return nil
 	}
 }
@@ -184,10 +185,10 @@ func copySample(name string) {
 	}
 	resp.Body.Close()
 
-	fmt.Println("Uploaded", name)
-	fmt.Println(resp.StatusCode)
-	fmt.Println(body)
-	fmt.Println("-------------------------------------------")
+	log.Println("Uploaded", name)
+	log.Println(resp.StatusCode)
+	log.Println(body)
+	log.Println("-------------------------------------------")
 }
 
 func buildRequest(uri string, params map[string]string, hash string) (*http.Request, error) {
@@ -217,12 +218,12 @@ func buildRequest(uri string, params map[string]string, hash string) (*http.Requ
 		}
 
 		r = resp.Body
+		// For files coming from CRITs: TODO: find real name somehow
 	}
 
 	// build Holmes-Storage PUT request
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	// TODO: find real name somehow
 	part, err := writer.CreateFormFile("sample", hash)
 	if err != nil {
 		return nil, err
