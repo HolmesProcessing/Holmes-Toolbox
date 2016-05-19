@@ -365,7 +365,7 @@ func main() {
     // gather various other information
     fmt.Println("> Other settings:")
     configObj.LogFile       = get_text(msg_logfile, "")
-    configObj.LogLevel      = get_text_generic(msg_loglevel, "debug", "error/warn/info/debug")
+    configObj.LogLevel      = get_text_generic(msg_loglevel, "info", "warning/info/debug")
     
     rabbitIP               := get_text(msg_rabbitip, "127.0.0.1")
     rabbitPort             := get_text(msg_rabbitport, "5672")
