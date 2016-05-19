@@ -1,0 +1,12 @@
+[Unit]
+Description=Totem-Storage
+
+[Service]
+User=totem
+Group=totem
+WorkingDirectory=INSTALL_DIRECTORY
+ExecStart=INSTALL_DIRECTORY/Holmes-Storage --config=CONFIG_FILE
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

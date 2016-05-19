@@ -1,0 +1,21 @@
+[Unit]
+Description=Totem-Services
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=forking
+User=totem
+Group=totem
+WorkingDirectory=/data/holmes-storage/config
+ExecStart=/sbin/start-stop-daemon \
+    --start \
+    --chdir "/data/holmes-storage/config"
+    --user totem
+    --group totem
+    --exec /usr/local/bin/docker-compose \
+    -- up -d
+
+
+[Install]
+WantedBy=multi-user.target
