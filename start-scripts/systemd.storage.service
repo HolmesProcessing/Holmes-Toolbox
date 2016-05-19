@@ -1,0 +1,12 @@
+[Unit]
+Description=Totem-Storage
+
+[Service]
+User=totem
+Group=totem
+WorkingDirectory=/data/holmes-storage
+ExecStart=/data/holmes-storage/Holmes-Storage --config=/data/holmes-storage/config.json
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
