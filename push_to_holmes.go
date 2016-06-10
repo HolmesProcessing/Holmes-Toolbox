@@ -72,11 +72,11 @@ func main() {
 	var fPath string
 	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
-	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server")
+	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server, i.e. 'http://storage:8080'")
 	flag.StringVar(&mimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
 	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
 	flag.StringVar(&comment, "comment", "", "Comment of submitter")
-	flag.StringVar(&source, "src", "", "Source of the files")
+	flag.StringVar(&source, "src", "", "Source information for the files")
 	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
 	flag.BoolVar(&recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
