@@ -32,7 +32,7 @@ Helper scripts for managing Holmes
 ### How to easily move files from a local folder to Holmes-Storage
 
 1. Make sure your Holmes-Storage is running
-2. `go run push_to_holmes.go --dir=$Folder --storage=$HolmesURL`
+2. `go run push_to_holmes.go --dir=$Folder --storage=$HolmesURL --src=$source --uid=$user`
 
 Alternative way:
 
