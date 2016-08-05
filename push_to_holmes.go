@@ -73,7 +73,7 @@ func main() {
 	var fPath string
 	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
-	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server, i.e. 'http://storage:8080'")
+	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server, i.e. 'http://storage:8080', or your Master-Gateway (with https)")
 	flag.StringVar(&mimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
 	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
 	flag.StringVar(&comment, "comment", "", "Comment of submitter")
