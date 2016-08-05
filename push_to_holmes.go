@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-//	"crypto/tls"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"io"
@@ -38,6 +38,7 @@ var (
 	mimetypePattern string
 	topLevel        bool
 	recursive       bool
+	insecure        bool
 	numWorkers      int
 	wg              sync.WaitGroup
 	c               chan string
@@ -80,6 +81,7 @@ func main() {
 	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
 	flag.BoolVar(&recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
+	flag.BoolVar(&insecure, "insecure", false, "If set, disables certificate checking")
 	flag.Parse()
 
 	//log.Sprintf("Copying samples from %s", fPath)
@@ -167,11 +169,19 @@ func copySample(name string) {
 	}
 
 	request, err := buildRequest(holmesStorage+"/samples/", parameters, name)
-	
+
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
 	}
-	client := &http.Client{}
+
+	tr := &http.Transport{}
+	if insecure{
+		// Disable SSL verification
+		tr = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	client = &http.Client{Transport: tr}
 	resp, err := client.Do(request)
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
