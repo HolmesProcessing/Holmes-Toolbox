@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-//	"crypto/tls"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"io"
@@ -38,6 +38,7 @@ var (
 	mimetypePattern string
 	topLevel        bool
 	recursive       bool
+	insecure        bool
 	numWorkers      int
 	wg              sync.WaitGroup
 	c               chan string
@@ -72,7 +73,7 @@ func main() {
 	var fPath string
 	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
-	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server, i.e. 'http://storage:8080'")
+	flag.StringVar(&holmesStorage, "storage", "", "Full URL to your Holmes-Storage server, i.e. 'http://storage:8080', or your Master-Gateway (with https)")
 	flag.StringVar(&mimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
 	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
 	flag.StringVar(&comment, "comment", "", "Comment of submitter")
@@ -80,6 +81,7 @@ func main() {
 	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
 	flag.BoolVar(&recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
+	flag.BoolVar(&insecure, "insecure", false, "If set, disables certificate checking")
 	flag.Parse()
 
 	//log.Sprintf("Copying samples from %s", fPath)
@@ -167,11 +169,19 @@ func copySample(name string) {
 	}
 
 	request, err := buildRequest(holmesStorage+"/samples/", parameters, name)
-	
+
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
 	}
-	client := &http.Client{}
+
+	tr := &http.Transport{}
+	if insecure{
+		// Disable SSL verification
+		tr = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	client = &http.Client{Transport: tr}
 	resp, err := client.Do(request)
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
