@@ -40,6 +40,8 @@ type Task struct {
 	Tags           []string            `json:"tags"`
 	Attempts       int                 `json:"attempts"`
 	Source         string              `json:"source"`
+	Download       bool                `json:"download"`
+	Comment        string              `json:"comment"`
 }
 
 var (
@@ -144,13 +146,15 @@ func main_tasking() {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	task := &Task{PrimaryURI:"", SecondaryURI:"", Filename:"", Tasks:nil, Tags:nil, Attempts:0, Source:""}
+	task := &Task{PrimaryURI:"", SecondaryURI:"", Filename:"", Tasks:nil, Tags:nil, Attempts:0, Source:"", Comment:comment, Download:true}
 	err = json.Unmarshal([]byte(tasks), &task.Tasks)
 	if err != nil {
+		log.Println("Error while parsing list of tasks!")
 		log.Fatal(err)
 	}
 	err = json.Unmarshal([]byte(tags), &task.Tags)
 	if err != nil {
+		log.Println("Error while parsing list of tags!")
 		log.Fatal(err)
 	}
 
@@ -170,7 +174,7 @@ func main_tasking() {
 	data.Set("task", string(jsoned))
 	data.Add("username", username)
 	data.Add("password", password)
-	
+
 	req, err := http.NewRequest("POST", gatewayURI, bytes.NewBufferString(data.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
@@ -191,7 +195,7 @@ func main_tasking() {
 		log.Fatal("Error: ", err)
 	}
 	log.Println("The server returned:")
-	log.Println(tskerrors)
+	log.Println(string(tskerrors))
 }
 
 func main_object() {
