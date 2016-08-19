@@ -49,7 +49,6 @@ var (
 	critsFileServer string
 	directory       string
 	comment         string
-	userid          string
 	source          string
 	mimetypePattern string
 	topLevel        bool
@@ -108,7 +107,6 @@ func main() {
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
 	flag.StringVar(&mimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
 	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
-	flag.StringVar(&userid, "uid", "-1", "User ID of submitter")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
 	flag.BoolVar(&recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
 
@@ -274,7 +272,7 @@ func walkFn(path string, fi os.FileInfo, err error) (error) {
 func copySample(name string) {
 	// set all necessary parameters
 	parameters := map[string]string{
-		"user_id":  userid, // user id of uploader (command line argument)
+		//"user_id": user id of uploader; is filled in by Gateway based on the specified username
 		"source":   source, // (TODO) Gateway should match existing sources (command line argument)
 		"name":     filepath.Base(name), // filename
 		"date":     time.Now().Format(time.RFC3339),
