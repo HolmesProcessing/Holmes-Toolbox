@@ -1,21 +1,25 @@
 import pika
 import json, os
-import time
+
+#TODO: add cli options
+#  - select domain, ip, file
+#  - includes errors
+#  - etc
 
 DOMAIN_FLAG = True
 IP_FLAG = True
 FILE_FLAG = True
 
-URI = "http://10.0.4.51:8016/samples/"
-URI2 = "http://10.0.4.51:8016/samples/"
+URI = "http://[storage_ip]:[port]/samples/"
+URI2 = "http://[storage_ip]:[port]/samples/"
 
-#TODO: add flag options
-#  - select domain, ip, file
-#  - includes errors
-#  - etc
+RABBIT_USERNAME = 'guest'
+RABBIT_PASSWORD = 'guest'
+RABBIT_IP ='127.0.0.1'
+RABBIT_PORT = 5672
 
-credentials = pika.PlainCredentials('guest', 'guest')
-parameters = pika.ConnectionParameters('127.0.0.1',
+credentials = pika.PlainCredentials(RABBIT_USERNAME, RABBIT_PASSWORD)
+parameters = pika.ConnectionParameters(RABBIT_IP,
     5672,
     '/',
     credentials)
@@ -30,12 +34,13 @@ channel.queue_declare(queue='totem_input',
 
 # TODO: add some more test cases. IPv6, domain with a subdomain, etc.
 file_list = []
-
 if IP_FLAG:
     file_list.append(("8.8.8.8", "ip"))
 if DOMAIN_FLAG:
     file_list.append(("google.com", "domain"))
 if FILE_FLAG:
+    # We should change these to files that we can provide over github. 
+    # Ma-shell has some binary files we could probably use.
     file_list.append(("0a4efbe854f1fa444303ca210842e779b55570216f62a4a406c89c564dabaf97", "file"))
     file_list.append(("2a43108a60fc5db94a001117093b6fff95697a8a5ab9a836b3c33c733c374c29", "file"))
     file_list.append(("04efbe854f1fa444303ca210842e779b55570216f62a4a406c89c564dabaf97", "file")) #fails
