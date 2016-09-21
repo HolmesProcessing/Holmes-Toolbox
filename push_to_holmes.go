@@ -12,19 +12,19 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"time"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/mgo.v2/bson"
 	"sync"
 
-	"github.com/rakyll/magicmime"
-	"strings"
-	"golang.org/x/crypto/ssh/terminal"
 	"encoding/json"
 	"fmt"
+	"github.com/rakyll/magicmime"
+	"golang.org/x/crypto/ssh/terminal"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 type critsSample struct {
@@ -33,15 +33,15 @@ type critsSample struct {
 }
 
 type Task struct {
-	PrimaryURI     string              `json:"primaryURI"`
-	SecondaryURI   string              `json:"secondaryURI"`
-	Filename       string              `json:"filename"`
-	Tasks          map[string][]string `json:"tasks"`
-	Tags           []string            `json:"tags"`
-	Attempts       int                 `json:"attempts"`
-	Source         string              `json:"source"`
-	Download       bool                `json:"download"`
-	Comment        string              `json:"comment"`
+	PrimaryURI   string              `json:"primaryURI"`
+	SecondaryURI string              `json:"secondaryURI"`
+	Filename     string              `json:"filename"`
+	Tasks        map[string][]string `json:"tasks"`
+	Tags         []string            `json:"tags"`
+	Attempts     int                 `json:"attempts"`
+	Source       string              `json:"source"`
+	Download     bool                `json:"download"`
+	Comment      string              `json:"comment"`
 }
 
 var (
@@ -81,8 +81,8 @@ func init() {
 }
 
 func worker() {
-	for true{
-		sample :=<- c
+	for true {
+		sample := <-c
 		//log.Printf("Working on %s\n", sample)
 		copySample(sample)
 		wg.Done()
@@ -133,7 +133,7 @@ func main() {
 
 func main_tasking() {
 	log.Println("Tasking...")
-	allTasks := make([]Task,0)
+	allTasks := make([]Task, 0)
 	file, err := os.Open(fPath)
 	if err != nil {
 		log.Println("Couln't open file containing sample list!", err.Error())
@@ -141,10 +141,9 @@ func main_tasking() {
 	}
 	defer file.Close()
 
-
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	task := &Task{PrimaryURI:"", SecondaryURI:"", Filename:"", Tasks:nil, Tags:nil, Attempts:0, Source:"", Comment:comment, Download:true}
+	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: nil, Attempts: 0, Source: "", Comment: comment, Download: true}
 	err = json.Unmarshal([]byte(tasks), &task.Tasks)
 	if err != nil {
 		log.Println("Error while parsing list of tasks!")
@@ -177,7 +176,7 @@ func main_tasking() {
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
 	tr := &http.Transport{}
-	if insecure{
+	if insecure {
 		// Disable SSL verification
 		tr = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -240,8 +239,8 @@ func main_object() {
 	wg.Wait()
 }
 
-func walkFn(path string, fi os.FileInfo, err error) (error) {
-	if fi.IsDir(){
+func walkFn(path string, fi os.FileInfo, err error) error {
+	if fi.IsDir() {
 		if recursive {
 			return nil
 		} else {
@@ -255,7 +254,7 @@ func walkFn(path string, fi os.FileInfo, err error) (error) {
 	}
 	mimetype, err := magicmime.TypeByFile(path)
 	if err != nil {
-		log.Println("mimetype error (skipping " + path + "):", err)
+		log.Println("mimetype error (skipping "+path+"):", err)
 		return nil
 	}
 	if strings.Contains(mimetype, mimetypePattern) {
@@ -273,7 +272,7 @@ func copySample(name string) {
 	// set all necessary parameters
 	parameters := map[string]string{
 		//"user_id": user id of uploader; is filled in by Gateway based on the specified username
-		"source":   source, // (TODO) Gateway should match existing sources (command line argument)
+		"source":   source,              // (TODO) Gateway should match existing sources (command line argument)
 		"name":     filepath.Base(name), // filename
 		"date":     time.Now().Format(time.RFC3339),
 		"comment":  comment, // comment from submitter (command line argument)
@@ -289,7 +288,7 @@ func copySample(name string) {
 	}
 
 	tr := &http.Transport{}
-	if insecure{
+	if insecure {
 		// Disable SSL verification
 		tr = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -320,6 +319,7 @@ func buildRequest(uri string, params map[string]string, hash string) (*http.Requ
 
 	// check if local file
 	r, err := os.Open(hash)
+	defer r.(*os.File).Close()
 	if err != nil {
 		// not a local file
 		// try to get file from crits file server
