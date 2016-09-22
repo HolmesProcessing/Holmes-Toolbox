@@ -172,7 +172,7 @@ func main_tasking() {
 	data.Add("username", username)
 	data.Add("password", password)
 
-	req, err := http.NewRequest("POST", gatewayURI, bytes.NewBufferString(data.Encode()))
+	req, err := http.NewRequest("POST", gatewayURI+"/task/", bytes.NewBufferString(data.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
 	tr := &http.Transport{}
@@ -191,8 +191,12 @@ func main_tasking() {
 	if err != nil {
 		log.Fatal("Error: ", err)
 	}
-	log.Println("The server returned:")
-	log.Println(string(tskerrors))
+	if string(tskerrors) == "" {
+		log.Println("The server returned an empty string (success)")
+	} else {
+		log.Println("The server returned the following errors:")
+		log.Println(string(tskerrors))
+	}
 }
 
 func main_object() {
