@@ -1,7 +1,15 @@
-# Toolbox
+# Holmes-Toolbox
 
-Helper scripts for managing Holmes
+## Overview
+The Holmes-Toolbox provides useful scripts for managing Holmes projects.
 
+### Highlights
+
+| Folder | Project | Description |
+| --- | --- | --- |
+| linux-installer | All | Universal install scripts for convience |
+| start-scripts | [Holmes-Totem](https://github.com/HolmesProcessing/Holmes-Totem), [Holmes-Storage](https://github.com/HolmesProcessing/Holmes-Storage) | Automatic start up scripts for systemd and upstart |
+| test-scripts | [Holmes-Totem](https://github.com/HolmesProcessing/Holmes-Totem) | Directly tasks [Holmes-Totem](https://github.com/HolmesProcessing/Holmes-Totem) with a series of objects |
 
 ### How to install Holmes-Totem/Storage on Ubuntu/Debian using the install script
 
