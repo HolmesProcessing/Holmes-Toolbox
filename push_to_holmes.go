@@ -60,7 +60,8 @@ var (
 
 	fPath      string
 	tasks      string
-	tags       string
+	tagsStr    string
+	tags       []string
 	gatewayURI string
 	username   string
 	password   string
@@ -101,7 +102,7 @@ func main() {
 	flag.StringVar(&username, "user", "", "Your username for authenticating to the master-gateway.")
 	flag.StringVar(&password, "pw", "", "Your password for authenticating to the master-gateway. If this value is not set, you will be prompted for it.")
 	flag.StringVar(&gatewayURI, "gateway", "", "The URI of the master-gateway.")
-	flag.StringVar(&tags, "tags", "", "The tags for these tasks.")
+	flag.StringVar(&tagsStr, "tags", "", "The tags for these tasks.")
 
 	// object specific
 	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
@@ -114,6 +115,12 @@ func main() {
 	flag.StringVar(&tasks, "tasks", "", "The tasks to execute.")
 
 	flag.Parse()
+
+	err := json.Unmarshal([]byte(tagsStr), &tags)
+	if err != nil {
+		log.Println("Error while parsing list of tags!")
+		log.Fatal(err)
+	}
 
 	if password == "" {
 		println("Please input your password for the master-gateway: ")
@@ -143,15 +150,10 @@ func main_tasking() {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: nil, Attempts: 0, Source: "", Comment: comment, Download: true}
+	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: tags, Attempts: 0, Source: "", Comment: comment, Download: true}
 	err = json.Unmarshal([]byte(tasks), &task.Tasks)
 	if err != nil {
 		log.Println("Error while parsing list of tasks!")
-		log.Fatal(err)
-	}
-	err = json.Unmarshal([]byte(tags), &task.Tags)
-	if err != nil {
-		log.Println("Error while parsing list of tags!")
 		log.Fatal(err)
 	}
 
@@ -274,19 +276,17 @@ func walkFn(path string, fi os.FileInfo, err error) error {
 
 func copySample(name string) {
 	// set all necessary parameters
-	parameters := map[string]string{
-		//"user_id": user id of uploader; is filled in by Gateway based on the specified username
-		"source":   source,              // (TODO) Gateway should match existing sources (command line argument)
-		"name":     filepath.Base(name), // filename
-		"date":     time.Now().Format(time.RFC3339),
-		"comment":  comment, // comment from submitter (command line argument)
-		"tags":     tags,
-		"username": username,
-		"password": password,
-	}
+	parameters := url.Values{}
+	//"user_id": user id of uploader; is filled in by Gateway based on the specified username
+	parameters.Add("source", source)            // (TODO) Gateway should match existing sources (command line argument)
+	parameters.Add("name", filepath.Base(name)) // filename
+	parameters.Add("date", time.Now().Format(time.RFC3339))
+	parameters.Add("comment", comment) // comment from submitter (command line argument)
+	parameters["tags"] = tags
+	parameters.Add("username", username)
+	parameters.Add("password", password)
 
 	request, err := buildRequest(gatewayURI+"/samples/", parameters, name)
-
 	if err != nil {
 		log.Fatal("ERROR: " + err.Error())
 	}
@@ -318,16 +318,17 @@ func copySample(name string) {
 	log.Println("-------------------------------------------")
 }
 
-func buildRequest(uri string, params map[string]string, hash string) (*http.Request, error) {
+func buildRequest(uri string, params url.Values, hash string) (*http.Request, error) {
 	var r io.Reader
 
 	// check if local file
+
 	r, err := os.Open(hash)
 	defer r.(*os.File).Close()
+
 	if err != nil {
 		// not a local file
 		// try to get file from crits file server
-
 		cId := &critsSample{}
 		if err := bson.Unmarshal([]byte(hash), cId); err != nil {
 			return nil, err
@@ -362,10 +363,12 @@ func buildRequest(uri string, params map[string]string, hash string) (*http.Requ
 		return nil, err
 	}
 
-	for key, val := range params {
-		err = writer.WriteField(key, val)
-		if err != nil {
-			return nil, err
+	for key, valMul := range params {
+		for _, val := range valMul {
+			err = writer.WriteField(key, val)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
