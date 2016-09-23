@@ -66,32 +66,23 @@ var (
 	username   string
 	password   string
 	tasking    bool
+
+	debug   *log.Logger
+	info    *log.Logger
+	warning *log.Logger
 )
-
-func init() {
-	// http client
-	tr := &http.Transport{}
-	/*
-		// Disable SSL verification
-		tr = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	*/
-
-	client = &http.Client{Transport: tr}
-}
 
 func worker() {
 	for true {
 		sample := <-c
-		//log.Printf("Working on %s\n", sample)
+		debug.Printf("Working on %s\n", sample)
 		copySample(sample)
 		wg.Done()
 	}
 }
 
 func main() {
-	log.Println("Running...")
+	log.Println("Preparing...")
 
 	// cmd line flags
 	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
@@ -116,21 +107,37 @@ func main() {
 
 	flag.Parse()
 
+	// setup logging
+	warning = log.New(os.Stderr, "\033[31m[WARNING]\033[0m ", log.Ldate|log.Ltime|log.Lshortfile)
+	info = log.New(os.Stdout, "\033[92m[INFO]\033[0m ", log.Ldate|log.Ltime)
+	debug = log.New(os.Stdout, "\033[34m[DEBUG]\033[0m ", log.Ldate|log.Ltime|log.Lshortfile)
+
 	err := json.Unmarshal([]byte(tagsStr), &tags)
 	if err != nil {
-		log.Println("Error while parsing list of tags!")
-		log.Fatal(err)
+		warning.Fatal("Error while parsing list of tags!", err)
 	}
 
+	// if no password is given via arg ask for it here
 	if password == "" {
 		println("Please input your password for the master-gateway: ")
 		pw, err := terminal.ReadPassword(0)
 		if err != nil {
-			log.Fatal(err)
+			warning.Fatal("Error reading password from terminal:", err)
 		}
 		password = string(pw)
 	}
 
+	// setup global http client
+	tr := &http.Transport{}
+	if insecure {
+		// Disable SSL verification
+		tr = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	client = &http.Client{Transport: tr}
+
+	// decide to add new tasks OR upload objects
 	if tasking {
 		main_tasking()
 	} else {
@@ -139,22 +146,21 @@ func main() {
 }
 
 func main_tasking() {
-	log.Println("Tasking...")
+	info.Println("Doing tasking...")
+
 	allTasks := make([]Task, 0)
+	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: tags, Attempts: 0, Source: "", Comment: comment, Download: true}
+
 	file, err := os.Open(fPath)
 	if err != nil {
-		log.Println("Couln't open file containing sample list!", err.Error())
-		return
+		warning.Fatal("Couln't open file containing sample list:", err.Error())
 	}
-	defer file.Close()
-
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: tags, Attempts: 0, Source: "", Comment: comment, Download: true}
+
 	err = json.Unmarshal([]byte(tasks), &task.Tasks)
 	if err != nil {
-		log.Println("Error while parsing list of tasks!")
-		log.Fatal(err)
+		warning.Fatal("Error while parsing list of tasks:", err)
 	}
 
 	// line by line
@@ -163,12 +169,15 @@ func main_tasking() {
 		fmt.Sscanf(t, "%s %s %s", &task.PrimaryURI, &task.Filename, &task.Source)
 		allTasks = append(allTasks, *task)
 	}
+	file.Close()
+
 	jsoned, err := json.Marshal(allTasks)
 	if err != nil {
-		log.Fatal(err)
+		warning.Fatal("Failed to marshal allTasks:", err)
 	}
 
-	log.Printf("%+v\n", string(jsoned))
+	debug.Printf("All tasks packed: %+v\n", string(jsoned))
+
 	data := &url.Values{}
 	data.Set("task", string(jsoned))
 	data.Add("username", username)
@@ -177,41 +186,38 @@ func main_tasking() {
 	req, err := http.NewRequest("POST", gatewayURI+"/task/", bytes.NewBufferString(data.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
-	tr := &http.Transport{}
-	if insecure {
-		// Disable SSL verification
-		tr = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
-	client := &http.Client{Transport: tr}
+
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error: ", err)
+		warning.Fatal("Error sending allTasks: ", err)
 	}
+
 	tskerrors, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error: ", err)
+		warning.Fatal("Error reading allTasks response: ", err)
 	}
+
 	if string(tskerrors) == "" {
-		log.Println("The server returned an empty string (success)")
+		info.Println("The server returned an empty string (success)")
 	} else {
-		log.Println("The server returned the following errors:")
-		log.Println(string(tskerrors))
+		warning.Println("The server returned the following errors:")
+		warning.Println(string(tskerrors))
 	}
 }
 
 func main_object() {
-	log.Println("Object Uploading...")
+	info.Println("Uploading objects...")
+
 	c = make(chan string)
 	for i := 0; i < numWorkers; i++ {
+		debug.Printf("Starting worker #%d\n", i)
 		go worker()
 	}
 
 	if fPath != "" {
 		file, err := os.Open(fPath)
 		if err != nil {
-			log.Println("Couln't open file containing sample list!", err.Error())
+			warning.Println("Couln't open file containing sample list!", err.Error())
 			return
 		}
 		defer file.Close()
@@ -225,6 +231,7 @@ func main_object() {
 			//go copySample(scanner.Text())
 		}
 	}
+
 	if directory != "" {
 		magicmime.Open(magicmime.MAGIC_MIME_TYPE | magicmime.MAGIC_SYMLINK | magicmime.MAGIC_ERROR)
 		defer magicmime.Close()
@@ -232,16 +239,17 @@ func main_object() {
 		fullPath, err := filepath.Abs(directory)
 
 		if err != nil {
-			log.Println("path error:", err)
+			warning.Println("path error:", err)
 			return
 		}
 		topLevel = true
 		err = filepath.Walk(fullPath, walkFn)
 		if err != nil {
-			log.Println("walk error:", err)
+			warning.Println("walk error:", err)
 			return
 		}
 	}
+
 	wg.Wait()
 }
 
@@ -260,16 +268,16 @@ func walkFn(path string, fi os.FileInfo, err error) error {
 	}
 	mimetype, err := magicmime.TypeByFile(path)
 	if err != nil {
-		log.Println("mimetype error (skipping "+path+"):", err)
+		warning.Println("mimetype error (skipping "+path+"):", err)
 		return nil
 	}
 	if strings.Contains(mimetype, mimetypePattern) {
-		log.Println("Adding " + path + " (" + mimetype + ")")
+		info.Println("Adding " + path + " (" + mimetype + ")")
 		wg.Add(1)
 		c <- path
 		return nil
 	} else {
-		log.Println("Skipping " + path + " (" + mimetype + ")")
+		info.Println("Skipping " + path + " (" + mimetype + ")")
 		return nil
 	}
 }
@@ -288,41 +296,33 @@ func copySample(name string) {
 
 	request, err := buildRequest(gatewayURI+"/samples/", parameters, name)
 	if err != nil {
-		log.Fatal("ERROR: " + err.Error())
+		warning.Fatal("buildRequest failed:", err.Error())
 	}
 
-	tr := &http.Transport{}
-	if insecure {
-		// Disable SSL verification
-		tr = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
-	client = &http.Client{Transport: tr}
 	resp, err := client.Do(request)
 	if err != nil {
-		log.Fatal("ERROR: " + err.Error())
-		return
+		warning.Fatal("sending sample request failed:", err.Error())
 	}
 
 	body := &bytes.Buffer{}
 	_, err = body.ReadFrom(resp.Body)
 	if err != nil {
-		log.Fatal("ERROR: " + err.Error())
+		warning.Fatal("reading sample request response failed:", err.Error())
 	}
-	resp.Body.Close()
+	SafeResponseClose(resp)
+	//resp.Body.Close()
 
-	log.Println("Uploaded", name)
-	log.Println(resp.StatusCode)
-	log.Println(body)
-	log.Println("-------------------------------------------")
+	info.Println("-----------------------------------------------------")
+	info.Println("Uploaded: ", name)
+	info.Println("Resp.Code:", resp.StatusCode)
+	info.Println("Resp.Body:", body)
+	info.Println("-----------------------------------------------------")
 }
 
 func buildRequest(uri string, params url.Values, hash string) (*http.Request, error) {
 	var r io.Reader
 
 	// check if local file
-
 	r, err := os.Open(hash)
 	defer r.(*os.File).Close()
 
