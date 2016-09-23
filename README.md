@@ -32,7 +32,7 @@ Helper scripts for managing Holmes
 ### How to easily move files from a local folder to Holmes-Storage
 
 1. Make sure your Holmes-Storage and your Holmes-Mastergateway are running
-2. e.g. `go run push_to_holmes.go --gateway https://127.0.0.1:8090 --user test --pw test --dir $dir --src foo --comment something --workers 5 --insecure`
+2. e.g. `go run push_to_holmes.go --gateway https://127.0.0.1:8090 --user test --pw test --tags '["tag1","tag2"]' --comment "mycomment" --insecure --workers 5 --src virusshare --dir $dir`
 
 Alternative way:
 
@@ -40,9 +40,9 @@ Alternative way:
 2. `cd` into folder
 3. `find `pwd` -type f > out.txt`
 4. Make sure your Holmes-Storage and Gateway are running
-5. e.g. `go run push_to_holmes.go --gateway https://127.0.0.1:8090 --user test --pw test --file out.txt --src foo --comment something --workers 5 --insecure`
+5. e.g. `go run push_to_holmes.go --gateway https://127.0.0.1:8090 --user test --pw test --tags '["tag1","tag2"]' --comment "mycomment" --insecure --workers 5 --src virusshare --file out.txt`
 
 ### How to easily task Holmes-Totem:
 1. Create a file containing a line with the SHA256-Sum, the filename, and the source (separated by single spaces) for each sample.
-2. e.g. `go run push_to_holmes.go --gateway https://127.0.0.1:8090 --tasking --file sampleFile --user test --pw test --tasks '{"PEINFO":[""], "YARA":[""]}' --tags '["mytag"]' --comment 'mycomment' --insecure`
+2. e.g. `go run push_to_holmes.go --gateway https://127.0.0.1:8090 --user test --pw test --tags '["tag1","tag2"]' --comment "mycomment" --insecure --tasking --file sampleFile --tasks '{"PEINFO":[], "YARA":[]}'`
 
