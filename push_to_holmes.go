@@ -143,6 +143,9 @@ func main() {
 	} else {
 		main_object()
 	}
+
+	info.Println("==================")
+	info.Println("Finished execution")
 }
 
 func main_tasking() {
@@ -320,6 +323,8 @@ func copySample(name string) {
 }
 
 func buildRequest(uri string, params url.Values, hash string) (*http.Request, error) {
+	debug.Println("Building request...")
+
 	var r io.Reader
 
 	// check if local file
@@ -327,6 +332,8 @@ func buildRequest(uri string, params url.Values, hash string) (*http.Request, er
 	defer r.(*os.File).Close()
 
 	if err != nil {
+		debug.Println("Found non local file", hash)
+
 		// not a local file
 		// try to get file from crits file server
 		cId := &critsSample{}
