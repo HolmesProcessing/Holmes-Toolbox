@@ -44,28 +44,40 @@ type Task struct {
 	Comment      string              `json:"comment"`
 }
 
-var (
-	client          *http.Client
-	critsFileServer string
-	directory       string
-	comment         string
-	source          string
-	mimetypePattern string
-	topLevel        bool
-	recursive       bool
-	insecure        bool
-	numWorkers      int
-	wg              sync.WaitGroup
-	c               chan string
+type Options struct {
+	// These are the options that are read in from the command line
+	// All that are in here are saved to the log and restored, when resuming a log
+	CritsFileServer string
+	Directory       string
+	Comment         string
+	Source          string
+	MimetypePattern string
+	Recursive       bool
+	Insecure        bool
 
-	fPath      string
-	tasks      string
-	tagsStr    string
+	FPath      string
+	Tasks      string
+	TagsStr    string
+	GatewayURI string
+	Username   string
+	Password   string
+	Tasking    bool
+}
+
+var (
+	numWorkers int
+	processed  map[string]int // filename -> returncode
+	resumeLog  string
+	resume     bool
+	logFile    *os.File
 	tags       []string
-	gatewayURI string
-	username   string
-	password   string
-	tasking    bool
+	topLevel   bool
+	client     *http.Client
+	wg         sync.WaitGroup
+	c          chan string
+	logC       chan string
+
+	options Options
 
 	debug   *log.Logger
 	info    *log.Logger
@@ -76,34 +88,101 @@ func worker() {
 	for true {
 		sample := <-c
 		debug.Printf("Working on %s\n", sample)
-		copySample(sample)
+		name, retCode := copySample(sample)
+		logC <- name + "\t" + strconv.Itoa(retCode) + "\n"
+	}
+}
+
+func logger() {
+	for true {
+		line := <-logC
+		_, err := logFile.WriteString(line)
+		if err != nil {
+			debug.Fatal(err)
+		}
 		wg.Done()
 	}
+}
+
+func initLogger() {
+	var err error
+	logC = make(chan string)
+
+	if resumeLog == "" {
+		resume = false
+		logFileName := time.Now().Format("log/Holmes-Toolbox_2006-01-02_15:04:05.log")
+		info.Println("logging to", logFileName)
+		logFile, err = os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			debug.Fatal("Could not open log-file:\n", err)
+		}
+
+		// Write all the commandline-options to the log-file
+		opt, err := json.Marshal(options)
+		if err != nil {
+			debug.Fatal(err)
+		}
+		_, err = logFile.WriteString(string(opt) + "\n")
+		if err != nil {
+			debug.Fatal(err)
+		}
+
+	} else { // Resume previously unfinished operation
+		resume = true
+		processed = make(map[string]int)
+		log.Println("Resuming...")
+		logFile, err = os.OpenFile(resumeLog, os.O_RDWR, 0666)
+		if err != nil {
+			debug.Fatal("Could not open log-file:\n", err)
+		}
+
+		scanner := bufio.NewScanner(logFile)
+
+		// Read options
+		scanner.Scan()
+		err = json.Unmarshal([]byte(scanner.Text()), &options)
+		if err != nil {
+			debug.Fatal("Could not load options from previous session:\n", err)
+		}
+
+		// build lookup-table to quickly identify, whether a sample was already uploaded
+		for scanner.Scan() {
+			t := scanner.Text()
+			//fmt.Sscanf(t, "%s\t%d\n", &name, &retcode)
+			parts := strings.Split(t, "\t")
+			processed[parts[0]], err = strconv.Atoi(parts[1])
+			if err != nil {
+				warning.Fatal("Couldn't parse logfile:\n", err)
+			}
+		}
+	}
+	go logger()
 }
 
 func main() {
 	log.Println("Preparing...")
 
 	// cmd line flags
-	flag.StringVar(&fPath, "file", "", "List of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
-	flag.StringVar(&comment, "comment", "", "Comment of submitter")
-	flag.StringVar(&source, "src", "", "Source information for the files")
-	flag.BoolVar(&insecure, "insecure", false, "If set, disables certificate checking")
-	flag.BoolVar(&tasking, "tasking", false, "Specify whether to do sample upload or tasking")
-	flag.StringVar(&username, "user", "", "Your username for authenticating to the master-gateway.")
-	flag.StringVar(&password, "pw", "", "Your password for authenticating to the master-gateway. If this value is not set, you will be prompted for it.")
-	flag.StringVar(&gatewayURI, "gateway", "", "The URI of the master-gateway.")
-	flag.StringVar(&tagsStr, "tags", "", "The tags for these tasks.")
+	flag.StringVar(&resumeLog, "resume", "", "Path to the log-file of a previously unfinished operation. If this parameter is used, all the others (except for 'workers') are overwritten with the saved values from the log")
+	flag.StringVar(&options.FPath, "file", "", "File containing a list of samples (MD5, SHAX, CRITs ID) to upload. Files are first searched locally. If they are not found and a CRITs file server is specified, they are taken from there. (optional)")
+	flag.StringVar(&options.Comment, "comment", "", "Comment of submitter")
+	flag.StringVar(&options.Source, "src", "", "Source information for the files")
+	flag.BoolVar(&options.Insecure, "insecure", false, "If set, disables certificate checking")
+	flag.BoolVar(&options.Tasking, "tasking", false, "Specify whether to do sample upload or tasking")
+	flag.StringVar(&options.Username, "user", "", "Your username for authenticating to the master-gateway.")
+	flag.StringVar(&options.Password, "pw", "", "Your password for authenticating to the master-gateway. If this value is not set, you will be prompted for it.")
+	flag.StringVar(&options.GatewayURI, "gateway", "", "The URI of the master-gateway.")
+	flag.StringVar(&options.TagsStr, "tags", "", "The tags for these tasks.")
 
 	// object specific
-	flag.StringVar(&critsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
-	flag.StringVar(&mimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
-	flag.StringVar(&directory, "dir", "", "Directory of samples to upload")
+	flag.StringVar(&options.CritsFileServer, "cfs", "", "Full URL to your CRITs file server, as a fallback (optional)")
+	flag.StringVar(&options.MimetypePattern, "mime", "", "Only upload files with the specified mime-type (as substring)")
+	flag.StringVar(&options.Directory, "dir", "", "Directory of samples to upload")
 	flag.IntVar(&numWorkers, "workers", 1, "Number of parallel workers")
-	flag.BoolVar(&recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
+	flag.BoolVar(&options.Recursive, "rec", false, "If set, the directory specified with \"-dir\" will be iterated recursively")
 
 	// tasking specific
-	flag.StringVar(&tasks, "tasks", "", "The tasks to execute.")
+	flag.StringVar(&options.Tasks, "tasks", "", "The tasks to execute.")
 
 	flag.Parse()
 
@@ -112,24 +191,29 @@ func main() {
 	info = log.New(os.Stdout, "\033[92m[INFO]\033[0m ", log.Ldate|log.Ltime)
 	debug = log.New(os.Stdout, "\033[34m[DEBUG]\033[0m ", log.Ldate|log.Ltime|log.Lshortfile)
 
-	err := json.Unmarshal([]byte(tagsStr), &tags)
+	if !options.Tasking {
+		//TODO: Enable logging for tasking, as well
+		initLogger()
+	}
+
+	err := json.Unmarshal([]byte(options.TagsStr), &tags)
 	if err != nil {
-		warning.Fatal("Error while parsing list of tags!", err)
+		warning.Fatal("Error while parsing list of tags! ", err)
 	}
 
 	// if no password is given via arg ask for it here
-	if password == "" {
+	if options.Password == "" {
 		println("Please input your password for the master-gateway: ")
 		pw, err := terminal.ReadPassword(0)
 		if err != nil {
 			warning.Fatal("Error reading password from terminal:", err)
 		}
-		password = string(pw)
+		options.Password = string(pw)
 	}
 
 	// setup global http client
 	tr := &http.Transport{}
-	if insecure {
+	if options.Insecure {
 		// Disable SSL verification
 		tr = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -138,7 +222,7 @@ func main() {
 	client = &http.Client{Transport: tr}
 
 	// decide to add new tasks OR upload objects
-	if tasking {
+	if options.Tasking {
 		main_tasking()
 	} else {
 		main_object()
@@ -152,16 +236,16 @@ func main_tasking() {
 	info.Println("Doing tasking...")
 
 	allTasks := make([]Task, 0)
-	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: tags, Attempts: 0, Source: "", Comment: comment, Download: true}
+	task := &Task{PrimaryURI: "", SecondaryURI: "", Filename: "", Tasks: nil, Tags: tags, Attempts: 0, Source: "", Comment: options.Comment, Download: true}
 
-	file, err := os.Open(fPath)
+	file, err := os.Open(options.FPath)
 	if err != nil {
 		warning.Fatal("Couln't open file containing sample list:", err.Error())
 	}
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
 
-	err = json.Unmarshal([]byte(tasks), &task.Tasks)
+	err = json.Unmarshal([]byte(options.Tasks), &task.Tasks)
 	if err != nil {
 		warning.Fatal("Error while parsing list of tasks:", err)
 	}
@@ -183,10 +267,10 @@ func main_tasking() {
 
 	data := &url.Values{}
 	data.Set("task", string(jsoned))
-	data.Add("username", username)
-	data.Add("password", password)
+	data.Add("username", options.Username)
+	data.Add("password", options.Password)
 
-	req, err := http.NewRequest("POST", gatewayURI+"/task/", bytes.NewBufferString(data.Encode()))
+	req, err := http.NewRequest("POST", options.GatewayURI+"/task/", bytes.NewBufferString(data.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
 
@@ -217,8 +301,8 @@ func main_object() {
 		go worker()
 	}
 
-	if fPath != "" {
-		file, err := os.Open(fPath)
+	if options.FPath != "" {
+		file, err := os.Open(options.FPath)
 		if err != nil {
 			warning.Println("Couln't open file containing sample list!", err.Error())
 			return
@@ -229,17 +313,22 @@ func main_object() {
 		scanner.Split(bufio.ScanLines)
 		// line by line
 		for scanner.Scan() {
+			sample := scanner.Text()
+			if resume && processed[sample] == 200 {
+				info.Printf("Skipping sample %s, because it was already uploaded successfully\n", sample)
+				continue
+			}
 			wg.Add(1)
-			c <- scanner.Text()
+			c <- sample
 			//go copySample(scanner.Text())
 		}
 	}
 
-	if directory != "" {
+	if options.Directory != "" {
 		magicmime.Open(magicmime.MAGIC_MIME_TYPE | magicmime.MAGIC_SYMLINK | magicmime.MAGIC_ERROR)
 		defer magicmime.Close()
 
-		fullPath, err := filepath.Abs(directory)
+		fullPath, err := filepath.Abs(options.Directory)
 
 		if err != nil {
 			warning.Println("path error:", err)
@@ -258,7 +347,7 @@ func main_object() {
 
 func walkFn(path string, fi os.FileInfo, err error) error {
 	if fi.IsDir() {
-		if recursive {
+		if options.Recursive {
 			return nil
 		} else {
 			if topLevel {
@@ -269,12 +358,17 @@ func walkFn(path string, fi os.FileInfo, err error) error {
 			}
 		}
 	}
+	if resume && processed[path] == 200 {
+		info.Printf("Skipping sample %s, because it was already uploaded successfully\n", path)
+		return nil
+	}
+
 	mimetype, err := magicmime.TypeByFile(path)
 	if err != nil {
 		warning.Println("mimetype error (skipping "+path+"):", err)
 		return nil
 	}
-	if strings.Contains(mimetype, mimetypePattern) {
+	if strings.Contains(mimetype, options.MimetypePattern) {
 		info.Println("Adding " + path + " (" + mimetype + ")")
 		wg.Add(1)
 		c <- path
@@ -285,19 +379,19 @@ func walkFn(path string, fi os.FileInfo, err error) error {
 	}
 }
 
-func copySample(name string) {
+func copySample(name string) (string, int) {
 	// set all necessary parameters
 	parameters := url.Values{}
 	//"user_id": user id of uploader; is filled in by Gateway based on the specified username
-	parameters.Add("source", source)            // (TODO) Gateway should match existing sources (command line argument)
+	parameters.Add("source", options.Source)    // (TODO) Gateway should match existing sources (command line argument)
 	parameters.Add("name", filepath.Base(name)) // filename
 	parameters.Add("date", time.Now().Format(time.RFC3339))
-	parameters.Add("comment", comment) // comment from submitter (command line argument)
+	parameters.Add("comment", options.Comment) // comment from submitter (command line argument)
 	parameters["tags"] = tags
-	parameters.Add("username", username)
-	parameters.Add("password", password)
+	parameters.Add("username", options.Username)
+	parameters.Add("password", options.Password)
 
-	request, err := buildRequest(gatewayURI+"/samples/", parameters, name)
+	request, err := buildRequest(options.GatewayURI+"/samples/", parameters, name)
 	if err != nil {
 		warning.Fatal("buildRequest failed:", err.Error())
 	}
@@ -320,6 +414,7 @@ func copySample(name string) {
 	info.Println("Resp.Code:", resp.StatusCode)
 	info.Println("Resp.Body:", body)
 	info.Println("-----------------------------------------------------")
+	return name, resp.StatusCode
 }
 
 func buildRequest(uri string, params url.Values, hash string) (*http.Request, error) {
@@ -342,7 +437,7 @@ func buildRequest(uri string, params url.Values, hash string) (*http.Request, er
 		}
 		rawId := cId.Id.Hex()
 
-		resp, err := client.Get(critsFileServer + "/" + rawId)
+		resp, err := client.Get(options.CritsFileServer + "/" + rawId)
 		if err != nil {
 			return nil, err
 		}
@@ -356,7 +451,6 @@ func buildRequest(uri string, params url.Values, hash string) (*http.Request, er
 		r = resp.Body
 		// For files coming from CRITs: TODO: find real name somehow
 	}
-
 	// build Holmes-Storage PUT request
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
