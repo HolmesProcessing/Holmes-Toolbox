@@ -29,12 +29,12 @@ Proceed with the same steps for riak-cs-1 to riak-cs-n nodes.
 ## Running
 Build the Docker container:
 ```
-docker build -t S3-Proxy .
+docker build -t s3-proxy .
 ```
 
 Run the Docker Container:
 ```
-docker run -d --name S3-Proxy --ulimit nofile=256000 S3-Proxy sh -c "ulimit -n"
+docker run -d --name s3-proxy -p 8080:8080 --ulimit nofile=256000 s3-proxy
 ```
 
 ## Acknowledgments
