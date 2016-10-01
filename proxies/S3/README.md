@@ -9,6 +9,8 @@ Docker S3 Proxy provides an optimized way to connect to compatible S3 backend wh
 Ensure the ulimit hard and soft on your system supports higher then 256000.
 
 ### Configure Docker
+Copy the `haproxy.cfg.example` to haproxy.cfg`
+
 Edit the file `haproxy.cfg` so it includes the IP addresses or Domain Names of all the Riak-CS worker nodes. For example, if your first Riak-CS node `riak-cs-1` is located at 192.168.0.50 change the following line:
 
 FROM:
