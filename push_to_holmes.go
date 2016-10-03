@@ -66,7 +66,7 @@ type Options struct {
 
 var (
 	numWorkers int
-	processed  map[string]int // filename -> returncode
+	processed  map[string]struct{} // if a filename is in this struct, it was processed with code 200
 	resumeLog  string
 	resume     bool
 	logFile    *os.File
@@ -108,28 +108,10 @@ func initLogger() {
 	var err error
 	logC = make(chan string)
 
-	if resumeLog == "" {
-		resume = false
-		logFileName := time.Now().Format("log/Holmes-Toolbox_2006-01-02_15:04:05.log")
-		info.Println("logging to", logFileName)
-		logFile, err = os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			debug.Fatal("Could not open log-file:\n", err)
-		}
-
-		// Write all the commandline-options to the log-file
-		opt, err := json.Marshal(options)
-		if err != nil {
-			debug.Fatal(err)
-		}
-		_, err = logFile.WriteString(string(opt) + "\n")
-		if err != nil {
-			debug.Fatal(err)
-		}
-
-	} else { // Resume previously unfinished operation
+	if resumeLog != "" {
+		// Resume previously unfinished operation
 		resume = true
-		processed = make(map[string]int)
+		processed = make(map[string]struct{})
 		log.Println("Resuming...")
 		logFile, err = os.OpenFile(resumeLog, os.O_RDWR, 0666)
 		if err != nil {
@@ -148,14 +130,41 @@ func initLogger() {
 		// build lookup-table to quickly identify, whether a sample was already uploaded
 		for scanner.Scan() {
 			t := scanner.Text()
-			//fmt.Sscanf(t, "%s\t%d\n", &name, &retcode)
+			// name -> retcode
 			parts := strings.Split(t, "\t")
-			processed[parts[0]], err = strconv.Atoi(parts[1])
+			retcode, err := strconv.Atoi(parts[1])
 			if err != nil {
 				warning.Fatal("Couldn't parse logfile:\n", err)
 			}
+			if retcode == 200 {
+				// only files that were already processed successfully are in the map
+				processed[parts[0]] = struct{}{}
+			}
+
 		}
+	} else {
+		resume = false
 	}
+
+	// prepare the new log-file
+	os.Mkdir("log", 0755)
+	logFileName := time.Now().Format("log/Holmes-Toolbox_2006-01-02_15:04:05.log")
+	info.Println("logging to", logFileName)
+	logFile, err = os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		debug.Fatal("Could not open log-file:\n", err)
+	}
+
+	// Write all the commandline-options to the log-file
+	opt, err := json.Marshal(options)
+	if err != nil {
+		debug.Fatal(err)
+	}
+	_, err = logFile.WriteString(string(opt) + "\n")
+	if err != nil {
+		debug.Fatal(err)
+	}
+
 	go logger()
 }
 
@@ -314,11 +323,15 @@ func main_object() {
 		// line by line
 		for scanner.Scan() {
 			sample := scanner.Text()
-			if resume && processed[sample] == 200 {
-				info.Printf("Skipping sample %s, because it was already uploaded successfully\n", sample)
-				continue
-			}
 			wg.Add(1)
+			if resume {
+				_, already_processed := processed[sample]
+				if already_processed {
+					info.Printf("Skipping sample %s, because it was already uploaded successfully\n", sample)
+					logC <- sample + "\t200\n"
+					continue
+				}
+			}
 			c <- sample
 			//go copySample(scanner.Text())
 		}
@@ -358,9 +371,14 @@ func walkFn(path string, fi os.FileInfo, err error) error {
 			}
 		}
 	}
-	if resume && processed[path] == 200 {
-		info.Printf("Skipping sample %s, because it was already uploaded successfully\n", path)
-		return nil
+	if resume {
+		_, already_processed := processed[path]
+		if already_processed {
+			wg.Add(1)
+			info.Printf("Skipping sample %s, because it was already uploaded successfully\n", path)
+			logC <- path + "\t200\n"
+			return nil
+		}
 	}
 
 	mimetype, err := magicmime.TypeByFile(path)

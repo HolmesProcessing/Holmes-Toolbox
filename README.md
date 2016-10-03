@@ -57,7 +57,12 @@ Alternative way:
 ### Resuming an incomplete upload
 When executing Holmes-Toolbox for uploading samples, Holmes-Toolbox creates a new log-file in the "log"-folder. The name of the log-file is printed after Toolbox started and contains the current timestamp. If your upload crashes at some point, you can resume the upload by specifying the option `--resume`:
 ```sh
-go run push_to_holmes.go --resume log/Holmes-Toolbox_2016-09-25_20:39:44 --workers 5
+go run push_to_holmes.go --resume log/Holmes-Toolbox_2016-09-25_20:39:44.log --workers 5
 ```
 All the commandline-parameters that were used for the upload which created the log-file, are automatically inserted, except for the "--workers" option. This makes it possible to start the upload with a different number of worker-threads, than before, if you experienced a bad performance before.
 When resuming, all the samples that were accepted before, are skipped (i.e. those that returned with a code of 200). All samples that were rejected (different code than 200) and those that were not yet tried, are uploaded.
+
+Resuming an upload will also create a new log-file, where all the previously successful (and therefore skipped) uploads are marked with 200. You can easily get a list of all the files that were not correctly uploaded by executing
+```sh
+tail log/Holmes-Toolbox_2016-10-03_22:56:38.log -n +2 | grep -v 200
+```
