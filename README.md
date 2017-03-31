@@ -1,5 +1,7 @@
 # Holmes-Toolbox
 
+# Due to recent changes and upgrades of the HolmesProcessing system, these installation scripts are no longer up-to-date and will raise errors. We strongly encourage our users to install the Holmes components manually instead of using these resources.
+
 ## Overview
 The Holmes-Toolbox provides useful scripts for managing Holmes projects.
 
