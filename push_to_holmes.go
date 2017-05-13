@@ -496,8 +496,7 @@ func buildRequest(uri string, params url.Values, hash string) (*http.Request, er
 		return nil, err
 	}
 
-	request, err := http.NewRequest("PUT", uri, body)
-	//request, err := http.NewRequest("POST", uri, body)
+	request, err := http.NewRequest("POST", uri, body)
 	if err != nil {
 		return nil, err
 	}
