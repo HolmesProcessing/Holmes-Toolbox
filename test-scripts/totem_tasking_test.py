@@ -76,7 +76,7 @@ for f in file_list:
             "DNSMETA": []
         }
     elif f[1] == "file":
-        jsontask["download"] = False
+        jsontask["download"] = True
         jsontask["tasks"] = {
             "GOGADGET": [],
             "OBJDUMP": [],
