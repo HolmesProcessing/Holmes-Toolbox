@@ -2,10 +2,10 @@
 
 ## OverView
 
-This program generates the boiler plate code required to create a Holmes Totem Service. Currently this is only for creating Static Services.
+This program generates the boiler plate code required to create a Holmes Totem Service. Currently, this is only for creating Static Services.
 
 ### Purpose
-To create a service, we generally need to do a lot of copy-paste business. To avoid this extra work, this program generates the all the essential code needed. This template files can also be used as a reference to for how a typical holmes-totem-service looks like. There could be many templates (ex: RESTFull, gRPC) in their preferred language.the user just has to provide which kind of template he need. This helps people who wants to create a new services in Holmes easier easier to choose their template and focus on Service logic.
+To create a service, we generally need to do a lot of copy-paste business. To avoid this extra work, this program generates the all the essential code needed. This template files can also be used as a reference to for how a typical holmes-totem-service looks like. There could be many templates (ex: RESTFull, gRPC) in their preferred language.the user just has to provide which kind of template he needs. This helps people who want to create a new service in Holmes easier easier to choose their template and focus on Service logic.
 
 ## Configuration 
 
