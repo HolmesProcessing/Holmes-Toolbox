@@ -1,0 +1,5 @@
+{
+	"settings":	{
+		"httpbinding" : 8080
+	}
+}
